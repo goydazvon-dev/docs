@@ -34,6 +34,7 @@ jobs:
       run: |
         git config user.name "github-actions"
         git config user.email "github-actions@github.com"
-        git add plantuml_generated/
+        git add plantuml_generated/*
+        git status
         git diff --cached --quiet || git commit -m "Auto-update UML diagrams"
         git push
