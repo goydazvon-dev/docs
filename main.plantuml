@@ -3,6 +3,10 @@ database "s3" {
     "backet": "user_profiles",
     "filename": "uuid"
   }
+  json StorageGuild {
+    "backet": "guild_profiles",
+    "filename": "uuid"
+  }
 }
 
 
@@ -60,3 +64,33 @@ database "goyda-user-storage" {
 [Управление] <-> [UserData]
 
 
+node "goyda-guild-service" {
+  [Настройка гильдии] <-- access_jwt
+  [Настройка гильдии] <-> [Данные гильдии] 
+  uuid <- [Данные гильдии] 
+  аватарка_гильдии <- [Данные гильдии]
+  аватарка_гильдии <-> [StorageGuild]
+  название_гильдии <- [Данные гильдии]
+  [Участники гильдии] -> [Users]
+}
+
+database "goyda-guild-storage" {
+  folder "goyda-guild-postgres" {
+    json GuildData {
+      "uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
+      "creator": "creator_uuid",
+      "guild_name": "Охотники на картошку",
+      "avatar": "/images/guild/42621230-9357-45f9-ad77-9ad93beb1a37.png",
+      "public_url": "potatoman",
+      "type": "private|public"
+    }
+    json GuildUsers {
+      "guild_uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
+      "user_uuid": "42621230-9357-45f9-ad77-9ad93beb1a37"
+    }
+  }
+}
+[Данные гильдии] <-> [GuildData]
+[Участники гильдии] <-> [GuildUsers]
+[GuildUsers] -> [Users]
+[GuildData] -> [Users]
