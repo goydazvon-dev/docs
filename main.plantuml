@@ -1,0 +1,29 @@
+node "goyda-auth-service" {
+  [Аутентификация] -> access_jwt
+  [Аутентификация] -> refresh_jwt
+  http - [Аутентификация]
+  oauth -> [Аутентификация]
+  refresh_jwt -> [Jwt refresher]
+  [Jwt refresher] -> access_jwt
+}
+
+database "goyda-auth-storage" {
+  folder "goyda-auth-postgres" {
+    json Users {
+      "username":"covalski",
+      "uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
+      "email": "kovalski@goydazvon.com",
+      "hash": "c402dd93321356e65d9c4a10590cad9e",
+      "auth_provider": "google|bare"
+    }
+    json Sessions {
+      "user_uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
+      "session_name": "mobile",
+      "refresh_jwt_uuid": "a49bc641-f3a1-4931-ac2f-7744c1de3a5b"
+    }
+    [Users] <- [Sessions]
+  }
+}
+
+[Аутентификация] <-> [Users]
+[Jwt refresher] <-> [Sessions]
