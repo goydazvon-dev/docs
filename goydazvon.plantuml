@@ -1,0 +1,43 @@
+title Связь пользователей, гильдий, чатов и голосовых чатов
+
+actor User1
+actor User2
+actor User3
+
+rectangle "Гилдья общающихся с тараканами" as ServerA {
+  rectangle "Чат #1" as ChatA1
+  rectangle "Голосовой чат #1" as VoiceChatA1
+  rectangle "Голосовой чат #2" as VoiceChatA2
+  rectangle "Голосовой чат #3" as VoiceChatA3
+}
+
+rectangle "Гилдья ремонтников джетсона" as ServerB {
+  rectangle "Чат #1" as ChatB1
+  rectangle "Чат #2" as ChatB2
+  rectangle "Чат #3" as ChatB3
+  rectangle "Чат #4" as ChatB4
+  rectangle "Голосовой чат #1" as VoiceChatB1
+}
+
+User1 --> ServerA
+User1 --> ServerB
+
+User2 --> ServerA
+User3 --> ServerB
+
+ServerA --> ChatA1
+ServerA --> VoiceChatA1
+ServerA --> VoiceChatA2
+ServerA --> VoiceChatA3
+
+ServerB --> ChatB1
+ServerB --> ChatB2
+ServerB --> ChatB3
+ServerB --> ChatB4
+ServerB --> VoiceChatB1
+
+ChatA1 --> User1 : сообщения
+ChatB1 --> User3 : сообщения
+
+VoiceChatA1 --> User2 : аудио
+VoiceChatB1 --> User1 : аудио
