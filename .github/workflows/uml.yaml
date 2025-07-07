@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - '**.puml'
-      - '.github/workflows/uml.yml'
+      - '.github/workflows/uml.yaml'
   workflow_dispatch:
 
 jobs:
