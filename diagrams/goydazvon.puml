@@ -1,3 +1,4 @@
+@startuml
 title Связь пользователей, гильдий, чатов и голосовых чатов
 
 actor User1
@@ -41,3 +42,4 @@ ChatB1 --> User3 : сообщения
 
 VoiceChatA1 --> User2 : аудио
 VoiceChatB1 --> User1 : аудио
+@enduml

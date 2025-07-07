@@ -1,3 +1,4 @@
+@startuml
 database "s3" {
   json Storage {
     "backet": "user_profiles",
@@ -94,3 +95,4 @@ database "goyda-guild-storage" {
 [Участники гильдии] <-> [GuildUsers]
 [GuildUsers] -> [Users]
 [GuildData] -> [Users]
+@enduml
