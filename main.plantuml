@@ -27,3 +27,32 @@ database "goyda-auth-storage" {
 
 [Аутентификация] <-> [Users]
 [Jwt refresher] <-> [Sessions]
+
+database "s3" {
+  json Storage {
+    "backet": "user_profiles",
+    "filename": "uuid"
+  }
+}
+
+node "goyda-user-service" {
+  аватарка <- [Управление] 
+  никнейм <- [Управление]
+  дата_регистрации <- [Управление]
+  access_jwt --> [Управление]
+}
+
+[Storage] <-> [Управление]
+
+database "goyda-user-storage" {
+  folder "goyda-user-postgres" {
+    json UserData {
+      "uuid":"42621230-9357-45f9-ad77-9ad93beb1a37",
+      "nickname": "Glavniy pinguin",
+      "avatar": "/images/avatar/42621230-9357-45f9-ad77-9ad93beb1a37.png",
+      "registration_date": "1751915296"
+    }
+  }
+}
+
+[Управление] <-> [UserData]
