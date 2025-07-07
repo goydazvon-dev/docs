@@ -1,3 +1,11 @@
+database "s3" {
+  json Storage {
+    "backet": "user_profiles",
+    "filename": "uuid"
+  }
+}
+
+
 node "goyda-auth-service" {
   [Аутентификация] -> access_jwt
   [Аутентификация] -> refresh_jwt
@@ -28,12 +36,6 @@ database "goyda-auth-storage" {
 [Аутентификация] <-> [Users]
 [Jwt refresher] <-> [Sessions]
 
-database "s3" {
-  json Storage {
-    "backet": "user_profiles",
-    "filename": "uuid"
-  }
-}
 
 node "goyda-user-service" {
   аватарка <- [Управление] 
@@ -56,3 +58,5 @@ database "goyda-user-storage" {
 }
 
 [Управление] <-> [UserData]
+
+
