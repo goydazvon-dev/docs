@@ -153,4 +153,21 @@ database "goyda-voice-metadata-storage" {
 [Контролер звонка] <-> [Users]
 [VoiceData] <-> [Users]
 
+node "goyda-friends-service" {
+  [Контролер друзей] <-> access_jwt
+}
+
+database "goyda-friends-storage" {
+  folder "goyda-friends-postgres" {
+    json FriendData {
+      "uuid": "uuid",
+      "initiator_id": "",
+      "recipient_id": "",
+      "status": ""
+    }
+  }
+}
+
+[Контролер друзей] <-> FriendData
+
 @enduml
