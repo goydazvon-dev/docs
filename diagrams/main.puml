@@ -95,4 +95,41 @@ database "goyda-guild-storage" {
 [Участники гильдии] <-> [GuildUsers]
 [GuildUsers] -> [Users]
 [GuildData] -> [Users]
+
+node "goyda-message-service" {
+  [Список чатов] <-> [Сообщения в чате]
+  [Сообщения в чате] <- access_jwt
+  [Список чатов] <- [Данные гильдии]
+}
+
+database "goyda-message-storage" {
+  folder "goyda-message-postgres" {
+    json ChatData {
+      "chat_uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
+      "chat_name": "Обсуждение вкусов печенек",
+      "is_private": "false"
+    }
+    json ChatParticipantsData {
+      "chat_uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
+      "user": "user_uuid",
+      "from": "join date"
+    }
+  }
+  folder "goyda-message-mongo" {
+    json MessageData {
+      "uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
+      "parent_chat_uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
+      "sender_uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
+      "message_text": "Goyda",
+      "creation_date": "239045893745"
+    }
+  }
+  [MessageData] <-> [ChatData]
+  [ChatParticipantsData] <-> [ChatData]
+}
+[MessageData] <- [UserData]
+
+[Список чатов] <-> [ChatData]
+[Сообщения в чате] <-> [MessageData]
+
 @enduml
