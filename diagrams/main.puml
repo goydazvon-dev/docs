@@ -98,7 +98,7 @@ database "goyda-guild-storage" {
 
 node "goyda-message-service" {
   [Список чатов] <-> [Сообщения в чате]
-  [Сообщения в чате] <- access_jwt
+  [Сообщения в чате] <-- access_jwt
   [Список чатов] <- [Данные гильдии]
 }
 
@@ -131,5 +131,26 @@ database "goyda-message-storage" {
 
 [Список чатов] <-> [ChatData]
 [Сообщения в чате] <-> [MessageData]
+
+node "goyda-call-service" {
+  [Контролер звонка] <-- access_jwt
+}
+
+database "goyda-voice-metadata-storage" {
+  folder "goyda-voice-metadata-postgres" {
+    json VoiceData {
+      "call_uuid": "",
+      "user_ids": "",
+      "source_id": "",
+      "started_at": "",
+      "ended_at": "",
+      "initiator_id": ""
+    }
+  }
+}
+
+[Контролер звонка] <-> [VoiceData]
+[Контролер звонка] <-> [Users]
+[VoiceData] <-> [Users]
 
 @enduml
