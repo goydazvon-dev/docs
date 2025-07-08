@@ -29,10 +29,11 @@ jobs:
       run: |
         curl -L -o plantuml.jar https://github.com/plantuml/plantuml/releases/download/v1.2024.6/plantuml-1.2024.6.jar
 
-    - name: Generate UML
+    - name: Generate UML (SVG and PNG)
       run: |
         mkdir -p plantuml_generated
         find diagrams -name "*.puml" -exec java -jar plantuml.jar -tsvg -o ../plantuml_generated {} +
+        find diagrams -name "*.puml" -exec java -jar plantuml.jar -tpng -o ../plantuml_generated {} +
 
     - name: Commit and push
       run: |
