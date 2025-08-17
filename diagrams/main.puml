@@ -1,4 +1,4 @@
-@startuml
+@startuml main
 database "s3" {
   json Storage {
     "backet": "user_profiles",
@@ -18,6 +18,8 @@ node "goyda-auth-service" {
   oauth -> [Аутентификация]
   refresh_jwt -> [Jwt refresher]
   [Jwt refresher] -> access_jwt
+
+  [Аутентификация] -[#blue]> [Отправка подтверждения почты] : grpc
 }
 
 database "goyda-auth-storage" {
@@ -169,5 +171,27 @@ database "goyda-friends-storage" {
 }
 
 [Контролер друзей] <-> FriendData
+
+node "goyda-mail-service" {
+  [Отправка подтверждения почты] <-- grpc
+  [Отправка подтверждения почты] -> [EmailLogs]
+  [Отправка подтверждения почты] <-> [Users]
+}
+
+database "goyda-mail-storage" {
+  folder "goyda-mail-postgres" {
+    json EmailLogs {
+      "uuid": "uuid",
+      "user_uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
+      "email": "kovalski@goydazvon.com",
+      "type": "confirmation",
+      "status": "queued|sent|failed",
+      "created_at": "timestamp",
+      "sent_at": "timestamp"
+    }
+  }
+}
+
+[EmailLogs] <-> [Users]
 
 @enduml
