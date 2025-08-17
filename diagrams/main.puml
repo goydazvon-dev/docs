@@ -19,7 +19,7 @@ node "goyda-auth-service" {
   refresh_jwt -> [Jwt refresher]
   [Jwt refresher] -> access_jwt
 
-  [Аутентификация] -[#blue]> [Отправка подтверждения почты] : grpc
+  [Аутентификация] -[#blue]> [Отправка подтверждения почты] : grpc_mail
 }
 
 database "goyda-auth-storage" {
@@ -172,26 +172,30 @@ database "goyda-friends-storage" {
 
 [Контролер друзей] <-> FriendData
 
-node "goyda-mail-service" {
-  [Отправка подтверждения почты] <-- grpc
-  [Отправка подтверждения почты] -> [EmailLogs]
-  [Отправка подтверждения почты] <-> [Users]
-}
-
 database "goyda-mail-storage" {
   folder "goyda-mail-postgres" {
-    json EmailLogs {
+    json EmailData {
       "uuid": "uuid",
       "user_uuid": "42621230-9357-45f9-ad77-9ad93beb1a37",
       "email": "kovalski@goydazvon.com",
       "type": "confirmation",
-      "status": "queued|sent|failed",
+      "status": "queued sent failed",
       "created_at": "timestamp",
       "sent_at": "timestamp"
     }
   }
 }
 
-[EmailLogs] <-> [Users]
+node "goyda-mail-service" {
+  [Отправка подтверждения почты] <-- grpc_mail
+  [Отправка подтверждения почты] <-> [Users]
+}
+
+[EmailData] <-> grpc_mail
+
+frame "mail" {
+  send_mail <-- grpc_mail
+  mail_send_status --> grpc_mail
+}
 
 @enduml
