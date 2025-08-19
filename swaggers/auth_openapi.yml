@@ -1,0 +1,740 @@
+openapi: 3.0.3
+info:
+  title: GoyDaZvon Auth API
+  version: 1.0.0
+
+servers:
+  - url: https://api.goydazvon.ru
+    description: Прод
+  - url: https://staging.api.goydazvon.ru
+    description: Стейдж
+
+security:
+  - AccessToken: []
+
+tags:
+  - name: Auth
+    description: Регистрация, вход, токены
+  - name: Password
+    description: Управление паролями
+  - name: Email
+    description: Подтверждение и повторная отправка
+  - name: 2FA
+    description: Двухфакторная аутентификация (TOTP)
+  - name: Sessions
+    description: Управление сессиями и устройствами
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Регистрация нового пользователя
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              ok:
+                value:
+                  email: user@example.com
+                  username: vasya
+                  password: Str0ngP@ssw0rd!
+                  acceptTerms: true
+      responses:
+        '201':
+          description: Пользователь создан. Требуется подтверждение email (если включено)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: Конфликт уникальности
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                emailExists:
+                  summary: Email уже зарегистрирован
+                  value:
+                    error:
+                      code: EMAIL_ALREADY_EXISTS
+                      message: 'Email уже используется'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Вход по email/паролю (и опциональному 2FA)
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+            examples:
+              basic:
+                value:
+                  email: user@example.com
+                  password: Str0ngP@ssw0rd!
+                  remember: true
+      responses:
+        '200':
+          description: Успешный вход (если включен 2FA и не подтвержден — частичный ответ)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Требуется подтверждение email или 2FA
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginPending2FAResponse' }
+              examples:
+                need2fa:
+                  value:
+                    status: 2FA_REQUIRED
+                    methods: [TOTP]
+                    tempToken: 'eyJhbGciOiJIUzI1NiIsInR...' # временный JWT только для verify 2FA
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Обновление пары токенов по refresh (cookie или body)
+      operationId: refreshTokens
+      security:
+        - RefreshTokenCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: Новая пара токенов
+          headers:
+            Set-Cookie:
+              description: HttpOnly cookie с refresh токеном (если cookie flow)
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Выход и отзыв текущей refresh-сессии
+      operationId: logout
+      responses:
+        '204': { description: Успешно }        
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Текущий пользователь
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Данные текущего пользователя
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/email/verify:
+    post:
+      tags: [Email]
+      summary: Подтверждение email по коду/токену
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyEmailRequest' }
+      responses:
+        '204': { description: Подтвержден }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Уже подтвержден
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                already:
+                  value:
+                    error:
+                      code: EMAIL_ALREADY_VERIFIED
+                      message: Email уже подтвержден
+                        # ...correlationId удалён...
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/email/resend:
+    post:
+      tags: [Email]
+      summary: Повторная отправка письма подтверждения
+      operationId: resendEmail
+      responses:
+        '202': { description: Письмо поставлено в очередь }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Уже подтвержден
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                already:
+                  value:
+                    error:
+                      code: EMAIL_ALREADY_VERIFIED
+                      message: Email уже подтвержден
+                        # ...correlationId удалён...
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/password/forgot:
+    post:
+      tags: [Password]
+      summary: Запрос на сброс пароля
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPasswordRequest' }
+      responses:
+        '202': { description: Письмо (если email существует) поставлено в очередь }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/password/reset:
+    post:
+      tags: [Password]
+      summary: Сброс пароля по токену
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '204': { description: Сброшен }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410':
+          description: Токен истёк/использован
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                expired:
+                  value:
+                    error:
+                      code: TOKEN_EXPIRED
+                      message: Токен истёк
+                        # ...correlationId удалён...
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/password/change:
+    post:
+      tags: [Password]
+      summary: Смена пароля аутентифицированным пользователем
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '204': { description: Изменён }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/2fa/enable:
+    post:
+      tags: [2FA]
+      summary: Генерация секрета для включения 2FA
+      operationId: enable2FA
+      responses:
+        '200':
+          description: Секрет и QR (пока не активировано, надо подтвердить кодом)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TwoFASetupResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Уже включено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                already:
+                  value:
+                    error:
+                      code: TWO_FA_ALREADY_ENABLED
+                      message: 2FA уже включено
+                        # ...correlationId удалён...
+
+  /auth/2fa/verify:
+    post:
+      tags: [2FA]
+      summary: Подтверждение TOTP для активации или входа
+      operationId: verify2FA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Verify2FARequest' }
+      responses:
+        '200':
+          description: Если это вход — возвращает токены, если активация — статус
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Verify2FAResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Неверный код или устаревший tempToken
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                bad:
+                  value:
+                    error:
+                      code: INVALID_2FA_CODE
+                      message: Неверный код 2FA
+                        # ...correlationId удалён...
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/2fa/disable:
+    post:
+      tags: [2FA]
+      summary: Отключение 2FA (требует текущий пароль или код)
+      operationId: disable2FA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Disable2FARequest' }
+      responses:
+        '204': { description: Отключено }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Не включено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                notEnabled:
+                  value:
+                    error:
+                      code: TWO_FA_NOT_ENABLED
+                      message: 2FA не включено
+                      correlationId: ccc
+
+  /auth/sessions:
+    get:
+      tags: [Sessions]
+      summary: Список активных сессий (устройств)
+      operationId: listSessions
+      responses:
+        '200':
+          description: Сессии
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [Sessions]
+      summary: Отозвать все сессии кроме текущей
+      operationId: revokeAllSessions
+      responses:
+        '204': { description: Отозваны }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/sessions/{sessionId}:
+    delete:
+      tags: [Sessions]
+      summary: Отозвать конкретную сессию
+      operationId: revokeSession
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Отозвана }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    AccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Access JWT. Короткоживущий (например 15 мин). Передается в Authorization: Bearer.
+    RefreshTokenCookie:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+      description: HttpOnly Secure refresh cookie.
+
+  responses:
+    Unauthorized:
+      description: Нет или недействительный токен
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            noToken:
+              value:
+                error:
+                  code: UNAUTHORIZED
+                  message: Требуется аутентификация
+                    # ...correlationId удалён...
+    Forbidden:
+      description: Доступ запрещен
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Не найдено
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            notFound:
+              value:
+                error:
+                  code: NOT_FOUND
+                  message: Ресурс не найден
+    ValidationError:
+      description: Ошибка валидации входных данных
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationErrorResponse' }
+          examples:
+            invalid:
+              value:
+                error:
+                  code: VALIDATION_ERROR
+                  message: Ошибка валидации
+                  details:
+                    - field: email
+                      rule: email
+                      message: Некорректный email
+                    - field: password
+                      rule: pattern
+                      message: Пароль слишком простой
+    TooManyRequests:
+      description: Превышен лимит запросов
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: Секунд до возможности повторить
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            ratelimit:
+              value:
+                error:
+                  code: RATE_LIMIT_EXCEEDED
+                  message: Слишком много запросов
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        username: { type: string, pattern: '^[a-zA-Z0-9_]{3,32}$' }
+        displayName: { type: string, nullable: true, maxLength: 64 }
+        emailVerified: { type: boolean }
+        twoFAEnabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, email, username, emailVerified, twoFAEnabled, createdAt, updatedAt]
+
+    RegisterRequest:
+      type: object
+      required: [email, username, password, acceptTerms]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Уникальный email
+        username:
+          type: string
+          pattern: '^[a-zA-Z0-9_]{3,32}$'
+          description: Уникальный логин (3-32, латинские буквы, цифры, _)
+        password:
+          type: string
+          format: password
+          minLength: 12
+          description: 'Минимум: 1 строчная, 1 заглавная, 1 цифра, 1 спецсимвол'
+        acceptTerms:
+          type: boolean
+          enum: [true]
+          description: Пользовательские соглашения приняты (должно быть true)
+      additionalProperties: false
+
+    RegisterResponse:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        emailVerificationRequired: { type: boolean }
+      required: [user, emailVerificationRequired]
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        otp: { type: string, pattern: '^[0-9]{6}$', description: 'Если заранее знаем что требуется 2FA' }
+        remember: { type: boolean, default: false }
+        userAgent: { type: string, maxLength: 256 }
+      additionalProperties: false
+
+    LoginResponse:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        tokens: { $ref: '#/components/schemas/TokenPair' }
+        session: { $ref: '#/components/schemas/Session' }
+      required: [user, tokens, session]
+
+    LoginPending2FAResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [2FA_REQUIRED, EMAIL_UNVERIFIED]
+        methods:
+          type: array
+          items: { type: string, enum: [TOTP] }
+        tempToken:
+          type: string
+          description: Временный JWT (только для verify2FA)
+      required: [status]
+
+    RefreshRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          description: Если не cookie flow
+      additionalProperties: false
+
+    TokenPair:
+      type: object
+      properties:
+        accessToken: { type: string }
+        accessExpiresIn: { type: integer, description: Секунд до истечения }
+        refreshExpiresIn: { type: integer }
+      required: [accessToken, accessExpiresIn]
+
+    VerifyEmailRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, description: Подписанный токен или код }
+      additionalProperties: false
+
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+      additionalProperties: false
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, format: password, minLength: 12 }
+      additionalProperties: false
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password }
+        newPassword: { type: string, format: password, minLength: 12 }
+      additionalProperties: false
+
+    TwoFASetupResponse:
+      type: object
+      properties:
+        secret: { type: string }
+        otpauthUrl: { type: string }
+        qrImageBase64: { type: string, description: PNG base64 }
+      required: [secret, otpauthUrl]
+
+    Verify2FARequest:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, pattern: '^[0-9]{6}$' }
+        tempToken: { type: string, description: Если проверка при входе }        
+      additionalProperties: false
+
+    Verify2FAResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [ACTIVATED, AUTHENTICATED] }
+        tokens: { $ref: '#/components/schemas/TokenPair' }
+        session: { $ref: '#/components/schemas/Session' }
+      required: [status]
+
+    Disable2FARequest:
+      type: object
+      properties:
+        password: { type: string, format: password }
+        code: { type: string, pattern: '^[0-9]{6}$' }
+      anyOf:
+        - required: [password]
+        - required: [code]
+      additionalProperties: false
+
+    Session:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        lastActiveAt: { type: string, format: date-time }
+        ip: { type: string, format: ipv4 }
+      required: [id, createdAt, lastActiveAt, current, revoked]
+
+    SessionListResponse:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items: { $ref: '#/components/schemas/Session' }
+      required: [sessions]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error: { $ref: '#/components/schemas/ErrorObject' }
+      required: [error]
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        error: { $ref: '#/components/schemas/ValidationErrorObject' }
+      required: [error]
+
+    ErrorObject:
+      type: object
+      properties:
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string }
+        correlationId: { type: string }
+        details: { type: array, items: { $ref: '#/components/schemas/ErrorDetail' }, nullable: true }
+      required: [code, message, correlationId]
+
+    ValidationErrorObject:
+      allOf:
+        - $ref: '#/components/schemas/ErrorObject'
+        - type: object
+          properties:
+            details:
+              type: array
+              minItems: 1
+              items: { $ref: '#/components/schemas/FieldValidationError' }
+          required: [details]
+
+    ErrorDetail:
+      type: object
+      properties:
+        field: { type: string }
+        rule: { type: string }
+        message: { type: string }
+      required: [message]
+
+    FieldValidationError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorDetail'
+        - type: object
+          required: [field, rule]
+
+    ErrorCode:
+      type: string
+      description: Машинные коды ошибок
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - NOT_FOUND
+        - RATE_LIMIT_EXCEEDED
+        - INTERNAL_ERROR
+        - EMAIL_ALREADY_EXISTS
+        - EMAIL_ALREADY_VERIFIED
+        - TOKEN_EXPIRED
+        - INVALID_2FA_CODE
+        - TWO_FA_ALREADY_ENABLED
+        - TWO_FA_NOT_ENABLED
+        - SESSION_NOT_FOUND
+        - REFRESH_TOKEN_INVALID
+        - REFRESH_TOKEN_REVOKED
+        - REFRESH_TOKEN_EXPIRED
+        - PASSWORD_REUSED
+        - PASSWORD_WEAK
+        - ACCOUNT_LOCKED
+
+    OAuthStartResponse:
+      type: object
+      properties:
+        authUrl: { type: string }
+        state: { type: string }
+        expiresIn: { type: integer, description: 'Секунд до истечения state' }
+      required: [authUrl, state]
+    JwksResponse:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            properties:
+              kty: { type: string }
+              kid: { type: string }
+              use: { type: string }
+              alg: { type: string }
+              n: { type: string }
+              e: { type: string }
+            required: [kty, kid, use, alg]
+      required: [keys]
+    AvailabilityResponse:
+      type: object
+      properties:
+        emailAvailable: { type: boolean, nullable: true }
+        usernameAvailable: { type: boolean, nullable: true }
+      additionalProperties: false
+      description: Результаты проверки доступности
+
+x-metrics:
+  counters:
+    - name: auth_login_attempts_total
+      labels: [result]
+    - name: auth_register_total
+      labels: [success]
+  histograms:
+    - name: auth_login_latency_seconds
+      buckets: [0.05, 0.1, 0.25, 0.5, 1, 2]
