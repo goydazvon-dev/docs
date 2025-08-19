@@ -1,0 +1,806 @@
+openapi: 3.0.3
+info:
+  title: GoyDaZvon Message API
+  version: 1.0.0
+  description: |
+    API микросервиса сообщений: чаты, участники, сообщения.
+    Требует Access JWT в Authorization: Bearer.
+
+servers:
+  - url: https://api.goydazvon.ru/message
+    description: Прод
+  - url: https://staging.api.goydazvon.ru/message
+    description: Стейдж
+
+security:
+  - AccessToken: []
+
+tags:
+  - name: Chats
+    description: Управление чатами в рамках гильдии
+  - name: Participants
+    description: Участники чатов
+  - name: Messages
+    description: Сообщения в чате
+  - name: DMs
+    description: Личные чаты (диалоги 1:1)
+  - name: DM Groups
+    description: Личные групповые чаты вне гильдий
+
+paths:
+  /chats:
+    get:
+      tags: [Chats]
+      summary: Список чатов гильдии
+      operationId: listChats
+      parameters:
+        - in: query
+          name: guildId
+          required: true
+          schema: { type: string, format: uuid }
+          description: UUID гильдии
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - in: query
+          name: cursor
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Список чатов
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatListResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Chats]
+      summary: Создать чат в гильдии
+      operationId: createChat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateChatRequest' }
+      responses:
+        '201':
+          description: Чат создан
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Chat' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Конфликт (имя занято или дубликат)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # --------------------------
+  # Direct Messages (DM)
+  # --------------------------
+  /dms:
+    get:
+      tags: [DMs]
+      summary: Список личных чатов текущего пользователя
+      operationId: listDMs
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - in: query
+          name: cursor
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Список DM-чатов
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [DMs]
+      summary: Начать личный чат с пользователем (или получить существующий)
+      operationId: startDM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartDmRequest' }
+      responses:
+        '201':
+          description: Создан (или найден) DM-чат
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Chat' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: DM уже существует (идемпотентность)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /dms/{chatId}:
+    get:
+      tags: [DMs]
+      summary: Информация о личном чате
+      operationId: getDM
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: DM-чат
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Chat' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # (объединено) сообщения DM возвращаются через /chats/{chatId}/messages
+
+  # --------------------------
+  # Group Direct Messages (DM Groups)
+  # --------------------------
+  /dm-groups:
+    get:
+      tags: [DM Groups]
+      summary: Список личных групповых чатов пользователя
+      operationId: listDmGroups
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - in: query
+          name: cursor
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Список групповых DM
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [DM Groups]
+      summary: Создать личную группу
+      operationId: createDmGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDmGroupRequest' }
+      responses:
+        '201':
+          description: Группа создана
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Chat' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /dm-groups/{chatId}:
+    get:
+      tags: [DM Groups]
+      summary: Информация о личной группе
+      operationId: getDmGroup
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Группа
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Chat' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [DM Groups]
+      summary: Обновить параметры группы (имя)
+      operationId: updateDmGroup
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateDmGroupRequest' }
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Chat' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [DM Groups]
+      summary: Выйти из группы или удалить, если участник последний
+      operationId: deleteDmGroup
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Удалено/покинул }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /dm-groups/{chatId}/participants:
+    get:
+      tags: [DM Groups]
+      summary: Список участников группы
+      operationId: listDmGroupParticipants
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Участники
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ParticipantListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [DM Groups]
+      summary: Пригласить участников в группу
+      operationId: addDmGroupParticipants
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddParticipantsRequest' }
+      responses:
+        '204': { description: Участники добавлены }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /dm-groups/{chatId}/participants/{userId}:
+    delete:
+      tags: [DM Groups]
+      summary: Исключить участника из группы
+      operationId: removeDmGroupParticipant
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Участник удален }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # (объединено) сообщения групп DM возвращаются через /chats/{chatId}/messages
+
+  /chats/{chatId}:
+    get:
+      tags: [Chats]
+      summary: Информация о чате
+      operationId: getChat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Чат
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Chat' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Chats]
+      summary: Обновить чат (имя/приватность)
+      operationId: updateChat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateChatRequest' }
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Chat' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Chats]
+      summary: Удалить чат
+      operationId: deleteChat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Удалено }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /chats/{chatId}/participants:
+    get:
+      tags: [Participants]
+      summary: Список участников чата
+      operationId: listParticipants
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: cursor
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Участники
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ParticipantListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Participants]
+      summary: Вступить в чат (текущий пользователь)
+      operationId: joinChat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Вступил }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Participants]
+      summary: Покинуть чат (текущий пользователь)
+      operationId: leaveChat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Покинул }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /chats/{chatId}/messages:
+    get:
+      tags: [Messages]
+      summary: История сообщений чата
+      operationId: listMessages
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: beforeId
+          required: false
+          schema: { type: string, format: uuid }
+          description: Возвращать сообщения раньше указанного messageId
+        - in: query
+          name: afterId
+          required: false
+          schema: { type: string, format: uuid }
+          description: Возвращать сообщения позже указанного messageId
+      responses:
+        '200':
+          description: Сообщения
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Messages]
+      summary: Отправить сообщение (универсальный эндпоинт по chatId)
+      description: |
+        Единый эндпоинт для отправки сообщения в любой чат по его уникальному идентификатору `chatId`.
+        Поддерживаются чаты всех типов: `GUILD`, `DM`, `GROUP` (см. поле `scope` сущности Chat).
+        Проверки прав доступа и членства выполняются на стороне сервиса.
+      operationId: sendMessage
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendMessageRequest' }
+            examples:
+              text:
+                value:
+                  text: "Goyda"
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # (объединено) операции с сообщением выполняются в пространстве чата
+  /chats/{chatId}/messages/{messageId}:
+    get:
+      tags: [Messages]
+      summary: Получить сообщение в чате по chatId и messageId
+      operationId: getMessageInChat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: messageId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Сообщение
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Messages]
+      summary: Изменить текст сообщения (автор или модератор) в рамках чата
+      operationId: editMessageInChat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: messageId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EditMessageRequest' }
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Messages]
+      summary: Удалить сообщение (автор или модератор) в рамках чата
+      operationId: deleteMessageInChat
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: messageId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Удалено }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    AccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access JWT для защиты эндпоинтов.
+
+  responses:
+    Unauthorized:
+      description: Нет или недействительный токен
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Доступ запрещен
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ValidationError:
+      description: Ошибка валидации входных данных
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationErrorResponse' }
+    TooManyRequests:
+      description: Превышен лимит запросов
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: Секунд до повтора
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    InternalError:
+      description: Внутренняя ошибка
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    PageInfo:
+      type: object
+      properties:
+        nextCursor: { type: string, nullable: true }
+        prevCursor: { type: string, nullable: true }
+
+    Chat:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        guildId: { type: string, format: uuid, nullable: true }
+        scope:
+          type: string
+          description: Область чата
+          enum: [GUILD, DM, GROUP]
+        name: { type: string, minLength: 1, maxLength: 128 }
+        isPrivate: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, isPrivate, createdAt, updatedAt, scope]
+
+    CreateChatRequest:
+      type: object
+      required: [guildId, name]
+      properties:
+        guildId: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        isPrivate: { type: boolean, default: false }
+      additionalProperties: false
+
+    UpdateChatRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        isPrivate: { type: boolean }
+      additionalProperties: false
+      minProperties: 1
+
+    ChatListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Chat' }
+        page: { $ref: '#/components/schemas/PageInfo' }
+      required: [items]
+
+    Participant:
+      type: object
+      properties:
+        chatId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        joinedAt: { type: string, format: date-time }
+      required: [chatId, userId, joinedAt]
+
+    ParticipantListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Participant' }
+        page: { $ref: '#/components/schemas/PageInfo' }
+      required: [items]
+
+    Message:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        chatId: { type: string, format: uuid }
+        senderId: { type: string, format: uuid }
+        text: { type: string, minLength: 1, maxLength: 5000 }
+        createdAt: { type: string, format: date-time }
+        editedAt: { type: string, format: date-time, nullable: true }
+        deleted: { type: boolean, default: false }
+      required: [id, chatId, senderId, text, createdAt]
+
+    MessageListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Message' }
+        page: { $ref: '#/components/schemas/PageInfo' }
+      required: [items]
+
+    StartDmRequest:
+      type: object
+      required: [peerId]
+      properties:
+        peerId: { type: string, format: uuid, description: UUID собеседника }
+      additionalProperties: false
+
+    CreateDmGroupRequest:
+      type: object
+      required: [name, participantIds]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        participantIds:
+          type: array
+          items: { type: string, format: uuid }
+          minItems: 1
+          maxItems: 99
+      additionalProperties: false
+
+    UpdateDmGroupRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+      additionalProperties: false
+      minProperties: 1
+
+    AddParticipantsRequest:
+      type: object
+      required: [userIds]
+      properties:
+        userIds:
+          type: array
+          items: { type: string, format: uuid }
+          minItems: 1
+          maxItems: 99
+      additionalProperties: false
+
+    SendMessageRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 5000 }
+      additionalProperties: false
+
+    EditMessageRequest:
+      type: object
+      properties:
+        text: { type: string, minLength: 1, maxLength: 5000 }
+      additionalProperties: false
+      minProperties: 1
+
+    ErrorResponse:
+      type: object
+      properties:
+        error: { $ref: '#/components/schemas/ErrorObject' }
+      required: [error]
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        error: { $ref: '#/components/schemas/ValidationErrorObject' }
+      required: [error]
+
+    ErrorObject:
+      type: object
+      properties:
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string }
+        details: { type: array, items: { $ref: '#/components/schemas/ErrorDetail' }, nullable: true }
+      required: [code, message]
+
+    ValidationErrorObject:
+      allOf:
+        - $ref: '#/components/schemas/ErrorObject'
+        - type: object
+          properties:
+            details:
+              type: array
+              minItems: 1
+              items: { $ref: '#/components/schemas/FieldValidationError' }
+          required: [details]
+
+    ErrorDetail:
+      type: object
+      properties:
+        field: { type: string }
+        rule: { type: string }
+        message: { type: string }
+      required: [message]
+
+    FieldValidationError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorDetail'
+        - type: object
+          required: [field, rule]
+
+    ErrorCode:
+      type: string
+      description: Машинные коды ошибок
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - NOT_FOUND
+        - RATE_LIMIT_EXCEEDED
+        - INTERNAL_ERROR
+        - CHAT_NOT_FOUND
+        - MESSAGE_NOT_FOUND
+        - PERMISSION_DENIED
+        - DUPLICATE_CHAT_NAME
+        - MEMBER_NOT_IN_CHAT
+        - DM_ALREADY_EXISTS
+        - USER_NOT_FOUND
